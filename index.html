@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f7f3e9">
+  <title>ひとことヒント ONLINE</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div>
+        <div class="brand">ひとことヒント</div>
+        <div class="sub">ONLINE v0.3</div>
+      </div>
+      <div class="topActions">
+        <span id="netBadge" class="netBadge offline">未接続</span>
+        <button id="rulesBtn" class="btn ghost small">ルール</button>
+      </div>
+    </header>
+    <main id="screen"></main>
+  </div>
+
+  <dialog id="modal">
+    <div id="modalBody"></div>
+    <form method="dialog" class="dialogActions"><button class="btn primary">閉じる</button></form>
+  </dialog>
+
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
