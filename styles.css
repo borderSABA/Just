@@ -39,3 +39,47 @@ dialog{border:0;border-radius:18px;padding:0;max-width:min(92vw,620px);box-shado
   .topbar{min-height:36px}.brand{font-size:14px}.sub{display:none}#screen{padding:3px 4px}.gameShell{gap:3px}.panel{padding:5px}.stat{padding:3px 1px}.stat b{font-size:13px}.bigName{font-size:13px}.rolePill{padding:2px 3px}.targetWord{font-size:26px}.notice{font-size:7.5px;padding:4px 5px}.playerList{grid-template-rows:repeat(2,30px)}.playerRow{padding:2px 1px}.playersHead{height:12px}.sideControls .btn{min-height:21px}.clueWord{font-size:12px}.clueOwner{font-size:6px}.removeButton{min-height:18px;font-size:6.5px}.waitingIcon{font-size:25px}.waiting h2{font-size:14px}.waiting p{font-size:8px}.modeCard span{display:none}.roomPlayers{display:none}.roomCard{gap:2px}.roomButtons .btn{min-height:23px}.hero h1{font-size:25px}
 }
 .phaseArea>.waiting:only-child,.phaseArea>.panel:only-child{grid-row:1/-1}
+
+/* v0.8: direct clue removal, larger clue text, v0.6-style title cards */
+.roomTopControls{display:flex;align-items:center;gap:5px}
+.topbarBtn{border:0;border-radius:9px;padding:6px 9px;min-height:30px;background:#ece7df;color:#514a40;font-size:11px;font-weight:950;cursor:pointer}
+.topbarBtn.danger{background:#f5dfdf;color:#983f3f}
+.titleClassic{grid-template-rows:auto auto minmax(0,1fr);gap:10px}
+.titleClassic .hero{padding:8px 6px 3px}
+.titleClassic .hero p{margin:7px 0 0;color:var(--muted);font-weight:750;font-size:13px}
+.titleClassic .namePanel{max-width:620px;padding:12px 16px}
+.titleClassic .roomsPanel{padding:14px;gap:10px}
+.titleClassic .roomGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.titleClassic .roomCard{padding:13px 14px;border-radius:17px;gap:7px}
+.titleClassic .roomName{font-size:19px}
+.titleClassic .roomMeta{font-size:11px}
+.titleClassic .roomPlayers{font-size:12px;line-height:1.4;-webkit-line-clamp:2}
+.titleClassic .roomButtons .btn{min-height:34px;font-size:11px}
+
+.clueCard{appearance:none;width:100%;color:var(--ink);text-align:initial;cursor:default}
+.clueCard:disabled{opacity:1}
+.clueCard.removeable{cursor:pointer}
+.clueCard.removeable:hover{border-color:#c9bfb0;transform:translateY(-1px)}
+.clueCard.removeable:active{transform:translateY(0)}
+.clueOwner{font-size:13px;line-height:1.15;padding-right:0;color:#655e55}
+.clueWord{font-size:clamp(25px,3.2vw,38px);line-height:1.05}
+.clueCard.removed{opacity:.68;background:#f1ece6;text-decoration:none;border-color:#d94b4b}
+.clueCard.removed .clueWord,.clueCard.removed .clueOwner{text-decoration:line-through}
+.removedMark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(48px,7vw,86px);font-weight:1000;line-height:1;color:rgba(217,75,75,.72);pointer-events:none;text-shadow:0 2px 0 #fff}
+.clueReviewPanel,.guessPanel{height:100%;min-height:0;overflow:hidden}
+.publishWait{flex:0 0 auto;font-size:10px}
+
+@media(max-width:760px){
+  .topActions{gap:4px}.roomTopControls{gap:3px}.topbarBtn{padding:4px 6px;min-height:25px;font-size:8px;border-radius:7px}
+  .titleClassic{gap:5px}.titleClassic .hero{padding:2px 2px 0}.titleClassic .hero p{font-size:9px;margin-top:3px}
+  .titleClassic .namePanel{padding:6px 8px}.titleClassic .roomsPanel{padding:7px;gap:5px}
+  .titleClassic .roomGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+  .titleClassic .roomCard{padding:6px 7px;border-radius:10px;gap:3px}.titleClassic .roomName{font-size:13px}.titleClassic .roomMeta{font-size:8px}.titleClassic .roomPlayers{font-size:9px;line-height:1.2;-webkit-line-clamp:2}.titleClassic .roomButtons .btn{min-height:25px;font-size:8.5px}
+  .clueOwner{font-size:10px;line-height:1.1}.clueWord{font-size:clamp(19px,5.3vw,25px)}.removedMark{font-size:clamp(38px,15vw,64px)}
+}
+@media(max-width:380px), (max-height:680px){
+  .titleClassic .hero p{display:none}.titleClassic .roomPlayers{display:none}
+  .clueOwner{font-size:9px}.clueWord{font-size:18px}.removedMark{font-size:42px}
+}
+@media(max-width:760px){.clueOwner{font-size:11px}.clueWord{font-size:clamp(21px,5.8vw,28px)}}
+@media(max-width:380px), (max-height:680px){.clueOwner{font-size:10px}.clueWord{font-size:20px}}

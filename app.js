@@ -23,7 +23,6 @@
   function playerName(id) { return state?.players?.find((p) => p.id === id)?.name || '不明'; }
   function nonGuesserPlayers() { return (state?.players || []).filter((p) => !p.isGuesser); }
   function submittedCount() { return nonGuesserPlayers().filter((p) => p.clueSubmitted).length; }
-  function voteDoneCount() { return nonGuesserPlayers().filter((p) => p.voteDone).length; }
   function setNet(mode, text) { netBadge.className = `netBadge ${mode}`; netBadge.textContent = text; }
   function modeName(mode) { return mode === 'target-score' ? '目標正解数モード' : 'ラウンド数モード'; }
 
@@ -167,7 +166,6 @@
         ${p.isGuesser?'<span class="badge guesser">回答者</span>':''}
         ${p.isJudge && !p.isHost?'<span class="badge judge">判定役</span>':''}
         ${state.phase==='clue' && !p.isGuesser && p.clueSubmitted?'<span class="badge done">ヒント済</span>':''}
-        ${state.phase==='vote' && !p.isGuesser && p.voteDone?'<span class="badge done">確認済</span>':''}
         ${state.phase==='lobby' && state.isHost && p.isCpu?`<button class="cpuRemove" data-remove-cpu="${esc(p.id)}">削除</button>`:''}
       </div>
     </div>`).join('')}</div>`;
@@ -185,23 +183,20 @@
   function clueCardsHtml(mode) {
     return `<div class="clueGrid">${(state.clues || []).map((c) => {
       const own = c.ownerId === session.playerId;
-      const voterLocked = state.voteDone;
-      const showVotes = mode !== 'guess';
-      const canVote = mode === 'vote' && !own && !voterLocked;
-      const canRemove = mode === 'review' && state.canJudgeClues;
-      return `<div class="clueCard ${c.myVote?'flagged':''} ${c.removed?'removed':''}">
+      const canRemove = mode === 'remove' && state.canRemoveClues;
+      const nextRemoved = c.removed ? 'false' : 'true';
+      return `<button type="button" class="clueCard ${c.removed?'removed':''} ${canRemove?'removeable':''}" ${canRemove?`data-remove="${esc(c.ownerId)}" data-next-removed="${nextRemoved}"`: 'disabled'}>
         <div class="clueOwner">${esc(c.ownerName)}${own?'（自分）':''}</div>
-        ${canVote?`<button class="xButton ${c.myVote?'on':''}" data-vote="${esc(c.ownerId)}">×</button>`:''}
         <div class="clueWord">${esc(c.text)}</div>
-        ${showVotes?`<div class="voteInfo">${c.voteNames?.length?`× ${c.voteNames.length}：${esc(c.voteNames.join('、'))}`:'× 0'}</div>`:''}
-        ${canRemove?`<button class="removeButton ${c.removed?'on':''}" data-remove="${esc(c.ownerId)}">${c.removed?'除去中・戻す':'このヒントを除去'}</button>`:''}
-      </div>`;
+        ${c.removed?'<div class="removedMark">×</div>':''}
+      </button>`;
     }).join('')}</div>`;
   }
 
   function bindClueButtons() {
-    document.querySelectorAll('[data-vote]').forEach((b) => b.onclick = () => action('toggleVote',{targetId:b.dataset.vote}));
-    document.querySelectorAll('[data-remove]').forEach((b) => b.onclick = () => action('toggleRemoved',{targetId:b.dataset.remove}));
+    document.querySelectorAll('[data-remove]').forEach((b) => b.onclick = () => action('setRemoved',{
+      targetId:b.dataset.remove, removed:b.dataset.nextRemoved === 'true'
+    }));
   }
 
   function renderTitle() {
@@ -210,9 +205,10 @@
     const savedName = localStorage.getItem(NAME_KEY) || '';
     screen.dataset.view = 'title';
     screen.dataset.phase = 'title';
-    screen.innerHTML = `<div class="titleShell">
-      <section class="hero"><h1>ジャストワン</h1></section>
-      <section class="panel namePanel">
+    const top = $('#roomTopControls'); if (top) top.innerHTML = '';
+    screen.innerHTML = `<div class="titleShell titleClassic">
+      <section class="hero"><h1>ジャストワン</h1><p>2～10人対応オンライン協力ワードゲーム</p></section>
+      <section class="panel namePanel stack">
         <label>プレイヤー名<input id="playerName" class="input" maxlength="16" value="${esc(savedName)}" placeholder="名前"></label>
       </section>
       <section class="panel roomsPanel"><h2 class="sectionTitle">部屋を選択</h2><div id="roomArea" class="roomGrid"><div class="muted">部屋情報を取得中...</div></div></section>
@@ -300,13 +296,15 @@
   function renderGame() {
     if (!session || !state) return;
     stopRoomRefresh();
+    const top = $('#roomTopControls');
+    if (top) top.innerHTML = `${state.canReset?'<button id="topResetRoom" class="topbarBtn">初期化</button>':''}<button id="topLeaveRoom" class="topbarBtn danger">退出</button>`;
+
     const header = `${statusHtml()}<section class="turnHead">${roleHtml()}<div class="bigName">${esc(me()?.name || '')}</div><div class="muted">${roomLabel(session.room)} / ${esc(modeName(state.mode))}</div></section>`;
     let body = '';
 
     if (state.phase === 'lobby') {
       body = `${lobbyModeHtml()}<section class="panel actions lobbyActions">
         ${state.isHost?`<button id="addCpu" class="btn secondary full" ${state.players.length>=10?'disabled':''}>テストCPUを追加</button><button id="startGame" class="btn primary full" ${state.canStart?'':'disabled'}>ゲーム開始</button>`:'<div class="notice">ホストがゲームを開始するまでお待ちください。</div>'}
-        <button id="leaveRoom" class="btn ghost full">部屋から退出</button>
       </section>`;
     }
 
@@ -316,34 +314,23 @@
         body = waitHtml('🙈','あなたは今回の回答者です','お題は表示されません。全員のヒント入力を待っています。',submittedCount(),givers.length);
       } else {
         body = `${targetHtml()}<section class="panel stack">
-          ${state.myClue?`<div class="notice green">ヒント送信済み：<b>${esc(state.myClue)}</b><br>全員の入力が終わるまでお待ちください。</div>`:`<div class="notice blue">他の人と相談せず、このお題を連想できるヒントを1語で入力してください。</div><input id="clueInput" class="input clueInput" maxlength="20" placeholder="ヒントを1語"><button id="submitClue" class="btn primary full">ヒントを送信</button>`}
+          ${state.myClue?`<div class="notice green">ヒント送信済み：<b>${esc(state.myClue)}</b><br>他のプレイヤーの入力待ちです。</div>`:`<input id="clueInput" class="input clueInput" maxlength="20" placeholder="ヒントを1語"><button id="submitClue" class="btn primary full">ヒントを送信</button>`}
           <div class="muted center">送信済み ${submittedCount()}/${givers.length}</div>
         </section>`;
       }
     }
 
-    else if (state.phase === 'vote') {
-      const givers = nonGuesserPlayers();
-      if (state.isGuesser) {
-        body = waitHtml('✖️','ヒント確認中です','回答者にはヒントも×投票もまだ表示されません。',voteDoneCount(),givers.length);
-      } else {
-        body = `${targetHtml()}<section class="panel stack"><div class="notice">「このヒントはダメでは？」と思うものに×を付けられます。×が付いても自動では消えません。自分のヒントには×を付けられません。</div>${clueCardsHtml('vote')}${state.voteDone?'<div class="notice green">確認完了済みです。他のプレイヤーを待っています。</div>':'<button id="voteDone" class="btn primary full">×確認完了</button>'}<div class="muted center">確認済み ${voteDoneCount()}/${givers.length}</div></section>`;
-      }
-    }
-
     else if (state.phase === 'host-review') {
       if (state.isGuesser) {
-        body = waitHtml('🧑‍⚖️','ヒント除去中です',`${esc(playerName(state.judgeId))} が最終確認しています。除去確定後にヒントが公開されます。`);
-      } else if (state.canJudgeClues) {
-        body = `${targetHtml()}<section class="panel stack"><div class="notice red">×票は参考情報です。最終的に無効にするヒントを手動で選んでください。</div>${clueCardsHtml('review')}<button id="publishClues" class="btn primary full">除去確定 → 回答者へヒント公開</button></section>`;
+        body = waitHtml('✖️','ヒント削除タイムです','削除が終わるまで、回答者にはヒントは表示されません。');
       } else {
-        body = `${targetHtml()}<section class="panel stack"><div class="notice">${esc(playerName(state.judgeId))} がヒントの最終除去をしています。</div>${clueCardsHtml('readonly')}</section>`;
+        body = `${targetHtml()}<section class="panel stack clueReviewPanel"><div class="notice red">削除するヒントをタップすると × が付きます。もう一度タップすると取り消せます。</div>${clueCardsHtml('remove')}${state.canPublishClues?'<button id="publishClues" class="btn primary full">削除確定 → 回答者へ公開</button>':'<div class="muted center publishWait">削除確定は判定役が行います。</div>'}</section>`;
       }
     }
 
     else if (state.phase === 'guess') {
       if (state.isGuesser) {
-        body = `<section class="panel stack"><div class="notice blue">有効なヒントだけが公開されました。お題を予想してください。</div>${clueCardsHtml('guess')}<input id="answerInput" class="input answerBig" maxlength="30" placeholder="回答"><div class="actions two"><button id="submitAnswer" class="btn primary">回答する</button><button id="pass" class="btn ghost">パス</button></div></section>`;
+        body = `<section class="panel stack guessPanel"><div class="notice blue">残ったヒントだけが公開されています。</div>${clueCardsHtml('guess')}<input id="answerInput" class="input answerBig" maxlength="30" placeholder="回答"><div class="actions two"><button id="submitAnswer" class="btn primary">回答する</button><button id="pass" class="btn ghost">パス</button></div></section>`;
       } else {
         body = `${targetHtml()}<section class="panel stack"><div class="notice">回答者の回答を待っています。</div>${clueCardsHtml('readonly')}</section>`;
       }
@@ -377,8 +364,7 @@
 
     screen.dataset.view = 'game';
     screen.dataset.phase = state.phase;
-    const sideControls = `<div class="sideControls">${state.canReset?'<button id="resetRoom" class="btn ghost small">部屋を初期化</button>':''}${state.phase !== 'lobby'?'<button id="leaveMatch" class="btn ghost small">マッチから退出</button>':''}</div>`;
-    screen.innerHTML = `<div class="gameShell"><div class="gameHeader">${header}</div><div class="phaseArea">${body}</div><aside class="gameSide"><section class="panel playersPanel"><div class="playersHead"><h2 class="sectionTitle">プレイヤー</h2><span class="roomCount">${state.players.length}/10</span></div>${playersHtml()}${sideControls}</section></aside></div>`;
+    screen.innerHTML = `<div class="gameShell"><div class="gameHeader">${header}</div><div class="phaseArea">${body}</div><aside class="gameSide"><section class="panel playersPanel"><div class="playersHead"><h2 class="sectionTitle">プレイヤー</h2><span class="roomCount">${state.players.length}/10</span></div>${playersHtml()}</section></aside></div>`;
     bindCurrentScreen();
   }
 
@@ -391,10 +377,7 @@
     on('#addCpu', () => action('addCpu'));
     document.querySelectorAll('[data-remove-cpu]').forEach((b) => b.onclick = () => action('removeCpu',{cpuId:b.dataset.removeCpu}));
     on('#startGame', () => action('start'));
-    on('#leaveRoom', () => action('leave'));
-    on('#leaveMatch', () => { if (confirm('マッチから退出しますか？')) action('leave'); });
     on('#submitClue', () => { const v = $('#clueInput').value.trim(); if (!v) return toast('ヒントを入力してください。'); action('submitClue',{clue:v}); });
-    on('#voteDone', () => action('voteDone'));
     on('#publishClues', () => action('publishClues'));
     on('#submitAnswer', () => { const v = $('#answerInput').value.trim(); if (!v) return toast('回答を入力してください。'); action('submitAnswer',{answer:v}); });
     on('#pass', () => action('pass'));
@@ -403,7 +386,8 @@
     on('#nextRound', () => action('nextRound'));
     on('#restartSame', () => action('restartSame'));
     on('#backLobby', () => action('backToLobby'));
-    on('#resetRoom', () => {
+    on('#topLeaveRoom', () => { if (confirm(state.phase === 'lobby' ? '部屋から退出しますか？' : 'マッチから退出しますか？')) action('leave'); });
+    on('#topResetRoom', () => {
       if (confirm('この部屋を完全に初期化しますか？参加者も全員退出扱いになります。')) action('reset',{keepPlayers:false});
     });
     const clue = $('#clueInput'); if (clue) clue.addEventListener('keydown',(e)=>{if(e.key==='Enter') $('#submitClue')?.click();});
