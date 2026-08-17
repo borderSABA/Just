@@ -83,3 +83,15 @@ dialog{border:0;border-radius:18px;padding:0;max-width:min(92vw,620px);box-shado
 }
 @media(max-width:760px){.clueOwner{font-size:11px}.clueWord{font-size:clamp(21px,5.8vw,28px)}}
 @media(max-width:380px), (max-height:680px){.clueOwner{font-size:10px}.clueWord{font-size:20px}}
+
+
+/* v0.9: result correction + masked removed clues for guesser */
+.btn.revise{background:#fff3d8;color:#795b12;border:1px solid #e8cb7b}
+.resultCorrection{display:grid;gap:5px;width:min(100%,360px);margin:4px auto 0}
+.clueCard.removed .clueOwner{position:relative;z-index:2;text-decoration:none;font-weight:950}
+.clueCard.removed .clueWord{text-decoration:line-through}
+.clueCard.maskedRemoved{opacity:1;background:#fff5f5;border:2px solid #d94b4b}
+.clueCard.maskedRemoved .clueOwner{color:#584d48;text-decoration:none}
+.clueCard.maskedRemoved .clueWord{text-decoration:none;min-height:1.05em}
+.clueCard.maskedRemoved .removedMark{color:#df2525;opacity:1;text-shadow:0 2px 0 #fff,0 0 8px rgba(255,255,255,.9)}
+@media(max-width:760px){.resultCorrection{gap:3px;margin-top:2px}.btn.revise{min-height:28px}}

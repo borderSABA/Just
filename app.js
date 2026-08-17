@@ -185,10 +185,11 @@
       const own = c.ownerId === session.playerId;
       const canRemove = mode === 'remove' && state.canRemoveClues;
       const nextRemoved = c.removed ? 'false' : 'true';
-      return `<button type="button" class="clueCard ${c.removed?'removed':''} ${canRemove?'removeable':''}" ${canRemove?`data-remove="${esc(c.ownerId)}" data-next-removed="${nextRemoved}"`: 'disabled'}>
+      const maskedRemoved = c.removed && (c.maskedByRemoval || !c.text);
+      return `<button type="button" class="clueCard ${c.removed?'removed':''} ${maskedRemoved?'maskedRemoved':''} ${canRemove?'removeable':''}" ${canRemove?`data-remove="${esc(c.ownerId)}" data-next-removed="${nextRemoved}"`: 'disabled'}>
         <div class="clueOwner">${esc(c.ownerName)}${own?'（自分）':''}</div>
-        <div class="clueWord">${esc(c.text)}</div>
-        ${c.removed?'<div class="removedMark">×</div>':''}
+        <div class="clueWord">${maskedRemoved?'&nbsp;':esc(c.text)}</div>
+        ${c.removed?'<div class="removedMark" aria-label="削除されたヒント">×</div>':''}
       </button>`;
     }).join('')}</div>`;
   }
@@ -349,7 +350,10 @@
     else if (state.phase === 'result') {
       const resultText = state.result === 'correct' ? '正解！' : state.result === 'pass' ? 'パス' : '不正解';
       const mark = state.result === 'correct' ? '⭕' : state.result === 'pass' ? '⏭️' : '❌';
-      body = `<section class="panel stack center"><div class="resultMark">${mark}</div><h2>${resultText}</h2><div class="muted">お題</div><div class="answerBig">${esc(state.currentTarget || '')}</div>${state.answer?`<div class="muted">回答：${esc(state.answer)}</div>`:''}</section>
+      const reviseButton = state.canReviseResult && state.result !== 'pass'
+        ? `<button id="reviseResult" class="btn revise full" data-result="${state.result === 'correct' ? 'wrong' : 'correct'}">${state.result === 'correct' ? '不正解に修正' : '正解に修正'}</button>`
+        : '';
+      body = `<section class="panel stack center"><div class="resultMark">${mark}</div><h2>${resultText}</h2><div class="muted">お題</div><div class="answerBig">${esc(state.currentTarget || '')}</div>${state.answer?`<div class="muted">回答：${esc(state.answer)}</div>`:''}${reviseButton?`<div class="resultCorrection"><div class="muted">押し間違えた場合</div>${reviseButton}</div>`:''}</section>
       <section class="panel actions">${state.canNextRound?`<button id="nextRound" class="btn primary full">${state.endPending?'最終結果を見る':'次のラウンド'}</button>`:'<div class="notice">ホストが進行します。</div>'}</section>`;
     }
 
@@ -383,6 +387,13 @@
     on('#pass', () => action('pass'));
     on('#judgeCorrect', () => action('judgeAnswer',{result:'correct'}));
     on('#judgeWrong', () => action('judgeAnswer',{result:'wrong'}));
+    on('#reviseResult', () => {
+      const b = $('#reviseResult');
+      if (!b) return;
+      const next = b.dataset.result;
+      const label = next === 'correct' ? '正解' : '不正解';
+      if (confirm(`このラウンドの判定を「${label}」に修正しますか？`)) action('reviseResult',{result:next});
+    });
     on('#nextRound', () => action('nextRound'));
     on('#restartSame', () => action('restartSame'));
     on('#backLobby', () => action('backToLobby'));
