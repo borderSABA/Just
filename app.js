@@ -208,12 +208,15 @@
     closeRealtime();
     stopRoomRefresh();
     const savedName = localStorage.getItem(NAME_KEY) || '';
-    screen.innerHTML = `
-      <section class="hero"><h1>ジャストワン</h1><p>2～10人対応オンライン協力ワードゲーム。<br>ヒントの×提案と最終除去はプレイヤー同士で行います。</p></section>
-      <section class="panel stack">
+    screen.dataset.view = 'title';
+    screen.dataset.phase = 'title';
+    screen.innerHTML = `<div class="titleShell">
+      <section class="hero"><h1>ジャストワン</h1></section>
+      <section class="panel namePanel">
         <label>プレイヤー名<input id="playerName" class="input" maxlength="16" value="${esc(savedName)}" placeholder="名前"></label>
       </section>
-      <section class="panel"><h2 class="sectionTitle">部屋を選択</h2><div id="roomArea" class="roomGrid"><div class="muted">部屋情報を取得中...</div></div></section>`;
+      <section class="panel roomsPanel"><h2 class="sectionTitle">部屋を選択</h2><div id="roomArea" class="roomGrid"><div class="muted">部屋情報を取得中...</div></div></section>
+    </div>`;
     loadRooms();
     roomRefreshTimer = setInterval(loadRooms, 5000);
   }
@@ -301,8 +304,7 @@
     let body = '';
 
     if (state.phase === 'lobby') {
-      body = `${lobbyModeHtml()}<section class="panel"><h2 class="sectionTitle">参加者 ${state.players.length}/10</h2>${playersHtml()}</section>
-      <section class="panel actions">
+      body = `${lobbyModeHtml()}<section class="panel actions lobbyActions">
         ${state.isHost?`<button id="addCpu" class="btn secondary full" ${state.players.length>=10?'disabled':''}>テストCPUを追加</button><button id="startGame" class="btn primary full" ${state.canStart?'':'disabled'}>ゲーム開始</button>`:'<div class="notice">ホストがゲームを開始するまでお待ちください。</div>'}
         <button id="leaveRoom" class="btn ghost full">部屋から退出</button>
       </section>`;
@@ -373,8 +375,10 @@
       </section>`;
     }
 
-    const matchLeave = state.phase !== 'lobby' ? '<section class="panel"><button id="leaveMatch" class="btn ghost full">マッチから退出</button></section>' : '';
-    screen.innerHTML = `${header}${body}<section class="panel"><h2 class="sectionTitle">プレイヤー</h2>${playersHtml()}${state.canReset?'<div style="margin-top:12px"><button id="resetRoom" class="btn ghost full">部屋を初期化</button></div>':''}</section>${matchLeave}`;
+    screen.dataset.view = 'game';
+    screen.dataset.phase = state.phase;
+    const sideControls = `<div class="sideControls">${state.canReset?'<button id="resetRoom" class="btn ghost small">部屋を初期化</button>':''}${state.phase !== 'lobby'?'<button id="leaveMatch" class="btn ghost small">マッチから退出</button>':''}</div>`;
+    screen.innerHTML = `<div class="gameShell"><div class="gameHeader">${header}</div><div class="phaseArea">${body}</div><aside class="gameSide"><section class="panel playersPanel"><div class="playersHead"><h2 class="sectionTitle">プレイヤー</h2><span class="roomCount">${state.players.length}/10</span></div>${playersHtml()}${sideControls}</section></aside></div>`;
     bindCurrentScreen();
   }
 
