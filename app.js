@@ -3,7 +3,7 @@
   const screen = $('#screen');
   const netBadge = $('#netBadge');
   const DEFAULT_SERVER = 'https://just-one-online.naitoryo7110.workers.dev';
-  const SESSION_KEY = 'justOneOnlineSessionV04';
+  const SESSION_KEY = 'justOneOnlineSessionV06';
   const NAME_KEY = 'justOneOnlineNameV04';
 
   let serverUrl = normalizeServer(DEFAULT_SERVER);
@@ -33,13 +33,23 @@
   }
 
   async function api(path, options = {}) {
-    const res = await fetch(`${serverUrl}${path}`, {
-      ...options,
-      headers: { 'Content-Type':'application/json', ...(options.headers || {}) }
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
-    return data;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(`${serverUrl}${path}`, {
+        ...options,
+        signal: controller.signal,
+        headers: { 'Content-Type':'application/json', ...(options.headers || {}) }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    } catch (e) {
+      if (e?.name === 'AbortError') throw new Error('サーバー応答がありません。Workersを再デプロイしてください。');
+      throw e;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async function action(type, payload = {}) {
@@ -210,6 +220,7 @@
 
   async function loadRooms() {
     const area = $('#roomArea'); if (!area) return;
+    setNet('connecting','接続確認中');
     try {
       const data = await api('/api/rooms');
       setNet('online','サーバーOK');
@@ -226,7 +237,8 @@
       document.querySelectorAll('[data-public-reset]').forEach((b) => b.onclick = () => publicResetRoom(b.dataset.publicReset));
     } catch (e) {
       setNet('offline','接続失敗');
-      area.innerHTML = `<div class="notice red">${esc(e.message)}<br>サーバーへ接続できません。</div>`;
+      area.innerHTML = `<div class="notice red">${esc(e.message)}<br>サーバーへ接続できません。</div><button id="retryServer" class="btn primary full" style="margin-top:12px">再接続</button>`;
+      $('#retryServer')?.addEventListener('click', loadRooms);
     }
   }
 
