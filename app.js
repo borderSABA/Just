@@ -1,15 +1,12 @@
 (() => {
   const $ = (s) => document.querySelector(s);
   const screen = $('#screen');
-  const modal = $('#modal');
-  const modalBody = $('#modalBody');
   const netBadge = $('#netBadge');
   const DEFAULT_SERVER = 'https://just-one-online.naitoryo7110.workers.dev';
   const SESSION_KEY = 'justOneOnlineSessionV04';
-  const SERVER_KEY = 'justOneOnlineServerV04';
   const NAME_KEY = 'justOneOnlineNameV04';
 
-  let serverUrl = normalizeServer(localStorage.getItem(SERVER_KEY) || DEFAULT_SERVER);
+  let serverUrl = normalizeServer(DEFAULT_SERVER);
   let session = readJson(localStorage.getItem(SESSION_KEY));
   let state = null;
   let socket = null;
@@ -153,13 +150,15 @@
 
   function playersHtml() {
     return `<div class="playerList">${state.players.map((p) => `<div class="playerRow">
-      <div class="playerMain"><span class="dot ${p.connected?'on':''}"></span><span class="playerName">${esc(p.name)}</span></div>
+      <div class="playerMain"><span class="dot ${p.isCpu?'cpu':(p.connected?'on':'')}"></span><span class="playerName">${esc(p.name)}</span></div>
       <div class="badges">
+        ${p.isCpu?'<span class="badge cpu">CPU</span>':''}
         ${p.isHost?'<span class="badge host">ホスト</span>':''}
         ${p.isGuesser?'<span class="badge guesser">回答者</span>':''}
         ${p.isJudge && !p.isHost?'<span class="badge judge">判定役</span>':''}
         ${state.phase==='clue' && !p.isGuesser && p.clueSubmitted?'<span class="badge done">ヒント済</span>':''}
         ${state.phase==='vote' && !p.isGuesser && p.voteDone?'<span class="badge done">確認済</span>':''}
+        ${state.phase==='lobby' && state.isHost && p.isCpu?`<button class="cpuRemove" data-remove-cpu="${esc(p.id)}">削除</button>`:''}
       </div>
     </div>`).join('')}</div>`;
   }
@@ -203,7 +202,6 @@
       <section class="hero"><h1>ジャストワン</h1><p>2～10人対応オンライン協力ワードゲーム。<br>ヒントの×提案と最終除去はプレイヤー同士で行います。</p></section>
       <section class="panel stack">
         <label>プレイヤー名<input id="playerName" class="input" maxlength="16" value="${esc(savedName)}" placeholder="名前"></label>
-        <div class="serverFixed">接続先：${esc(serverUrl)}</div>
       </section>
       <section class="panel"><h2 class="sectionTitle">部屋を選択</h2><div id="roomArea" class="roomGrid"><div class="muted">部屋情報を取得中...</div></div></section>`;
     loadRooms();
@@ -293,7 +291,7 @@
     if (state.phase === 'lobby') {
       body = `${lobbyModeHtml()}<section class="panel"><h2 class="sectionTitle">参加者 ${state.players.length}/10</h2>${playersHtml()}</section>
       <section class="panel actions">
-        ${state.isHost?`<button id="startGame" class="btn primary full" ${state.canStart?'':'disabled'}>ゲーム開始</button>`:'<div class="notice">ホストがゲームを開始するまでお待ちください。</div>'}
+        ${state.isHost?`<button id="addCpu" class="btn secondary full" ${state.players.length>=10?'disabled':''}>テストCPUを追加</button><button id="startGame" class="btn primary full" ${state.canStart?'':'disabled'}>ゲーム開始</button>`:'<div class="notice">ホストがゲームを開始するまでお待ちください。</div>'}
         <button id="leaveRoom" class="btn ghost full">部屋から退出</button>
       </section>`;
     }
@@ -363,7 +361,8 @@
       </section>`;
     }
 
-    screen.innerHTML = `${header}${body}<section class="panel"><h2 class="sectionTitle">プレイヤー</h2>${playersHtml()}${state.canReset?'<div style="margin-top:12px"><button id="resetRoom" class="btn ghost full">部屋を初期化</button></div>':''}</section>`;
+    const matchLeave = state.phase !== 'lobby' ? '<section class="panel"><button id="leaveMatch" class="btn ghost full">マッチから退出</button></section>' : '';
+    screen.innerHTML = `${header}${body}<section class="panel"><h2 class="sectionTitle">プレイヤー</h2>${playersHtml()}${state.canReset?'<div style="margin-top:12px"><button id="resetRoom" class="btn ghost full">部屋を初期化</button></div>':''}</section>${matchLeave}`;
     bindCurrentScreen();
   }
 
@@ -373,8 +372,11 @@
     document.querySelectorAll('[data-mode]').forEach((b) => b.onclick = () => action('setMode',{mode:b.dataset.mode}));
     const modeTarget = $('#modeTarget');
     if (modeTarget) modeTarget.onchange = () => action('setModeTarget',{target:Number(modeTarget.value)});
+    on('#addCpu', () => action('addCpu'));
+    document.querySelectorAll('[data-remove-cpu]').forEach((b) => b.onclick = () => action('removeCpu',{cpuId:b.dataset.removeCpu}));
     on('#startGame', () => action('start'));
     on('#leaveRoom', () => action('leave'));
+    on('#leaveMatch', () => { if (confirm('マッチから退出しますか？')) action('leave'); });
     on('#submitClue', () => { const v = $('#clueInput').value.trim(); if (!v) return toast('ヒントを入力してください。'); action('submitClue',{clue:v}); });
     on('#voteDone', () => action('voteDone'));
     on('#publishClues', () => action('publishClues'));
@@ -392,20 +394,6 @@
     const ans = $('#answerInput'); if (ans) ans.addEventListener('keydown',(e)=>{if(e.key==='Enter') $('#submitAnswer')?.click();});
   }
 
-  $('#rulesBtn').onclick = () => {
-    modalBody.innerHTML = `<h2>遊び方</h2><ol>
-      <li>2～10人で同じ部屋に参加し、ホストがゲームモードを設定します。</li>
-      <li><b>ラウンド数モード</b>は指定ラウンド終了時の正解数を記録します。</li>
-      <li><b>目標正解数モード</b>は指定した正解数に到達するまでのラウンド数を記録します。</li>
-      <li>各ラウンドで回答者が1人決まり、回答者以外にだけランダムなお題が表示されます。</li>
-      <li>回答者以外は各自1語のヒントを送信します。</li>
-      <li>全ヒント公開後、各プレイヤーは怪しいヒントへ×を付けられます。自動除去はありません。</li>
-      <li>全員の確認後、ホストが×票を参考にヒントを手動除去します。ホストが回答者の回だけ代理判定役が担当します。</li>
-      <li>残ったヒントだけ回答者へ公開し、回答後に判定役が正解・不正解を判定します。</li>
-      <li>不正解やパスでも1ラウンド終了です。追加で問題を失う処理はありません。</li>
-    </ol><p class="muted">お題語彙は市販版の収録カードをコピーせず、オリジナル語彙を使用しています。</p>`;
-    modal.showModal();
-  };
 
   if (session) reconnect(); else renderTitle();
 })();
