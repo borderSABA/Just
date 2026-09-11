@@ -1,0 +1,132 @@
+ジャストワン：
+共通化バージョン：v0.10 / オンラインボドゲ共通化 実装規格 v4
+
+[ADAPTER]
+GAME_ID = just-one
+GAME_NAME = ジャストワン
+MAX_PLAYERS = 10
+WORKER_ORIGIN = https://just-one-online.naitoryo7110.workers.dev
+APP_VERSION = v0.10
+タイトル描画関数 = renderTitle()
+ROOM一覧描画関数 = loadRooms()
+ROOM参加関数 = joinRoom() / checkRoomJoin()
+ゲーム開始関数 = action('start') / GameRoomV6.action(type=start)
+再接続関数 = reconnect() / restoreSession() / scheduleReconnect()
+ROOM初期化関数 = resetRoom() / GameRoomV6.resetEmpty()
+WorkerのROOMクラス/処理 = GameRoomV6
+Workerの保存関数 = save() / saveAndBroadcast()
+参加者配列 = this.game.players（isCpu=false）
+CPU配列 = this.game.players（isCpu=true）
+ゲーム状態 = this.game
+
+[CLIENT]
+ファイル：app.js
+変更関数：renderTitle() / loadRooms()
+・共通名キー boardgamePlayerName を初期値に使用
+・ROOM 1～4固定表示
+・PC 4列 / スマホ 2列×2段
+・参加者名、人数、待機中/ゲーム中/終了、参加、個別初期化を表示
+
+変更関数：joinRoom() / checkRoomJoin()
+・WebSocket接続前に /join-check を実行
+・空ROOMだけホスト権限確認
+・既存ROOMは一般参加可能
+・ROOM参加時に boardgamePlayerName を保存しない
+
+変更関数：onRoomStateReceived()
+・status=playing または gameStarted=true かつ gameSessionId受信時だけ共通名保存
+
+変更関数：tokenKey() / getToken() / restoreSession() / reconnect() / scheduleReconnect()
+・GAME_ID単位の再接続token
+・現在ROOM / active name保持
+・ページ更新、オンライン復帰、タブ復帰時再接続
+
+変更関数：resetRoom()
+・/reset-empty?roomId=... を使用
+・指定ROOMのみ初期化
+・確認ダイアログあり
+
+変更関数：action() / newActionId()
+・共通化操作へactionId付与
+
+ファイル：styles.css
+・PC ROOM 4列
+・スマホ ROOM 2列×2段
+・各ROOM内の参加ボタン下に初期化ボタン
+
+ファイル：index.html
+・v0.10表記へ更新
+・HOME / プレイ記録ボタンなし
+
+[WORKER]
+ファイル：src/index.js
+変更箇所：共通定数 / commonBase() / parseJsonSafe() / checkHostPermission()
+・COMMON_MANAGER_URL追加
+・空ROOMホスト権限確認を共通管理Workerへ接続
+・権限なし文言「ホスト権限がありません」固定
+・確認失敗文言「ホスト権限を確認できません。」固定
+
+変更関数：joinCheck() / join()
+・空ROOMのみホスト権限確認
+・既存ROOMは権限確認を通さない
+・join()でも再度確認
+・再接続はtoken優先
+
+変更関数：resetEmpty()
+・接続中の人間がいる場合はタイトルから初期化不可
+・指定DO/ROOMだけ完全初期化
+
+変更関数：makeFreshGame() / migrateGame()
+・recordEpoch / gameSequence / recordAttempt / gameSessionId / startedAt / playRecordStatus追加
+・processedActions追加
+
+変更関数：createPlayRecordForStart() / writePlayRecord()
+・ゲーム開始成立時だけ /api/play/start へ送信
+・recordId = GAME_ID-roomId-recordEpoch-sequence
+・再送しない方式
+・restartSameも新しいゲームとしてgameSequenceを増加
+
+変更関数：action() / isDuplicateAction()
+・設定変更、開始、CPU追加削除、リセット等の共通化操作を二重処理防止
+
+変更関数：publicState()
+・status / gameStarted / gameSessionId / startedAtをクライアントへ通知
+
+ファイル：wrangler.jsonc
+・既存ROOMS=GameRoomV6を維持
+・COMMON_MANAGER_URL vars追加
+・既存Worker名 just-one-online を維持
+
+[UNCHANGED]
+・ジャストワンのゲームルール
+・ヒント入力/除去/回答/判定フロー
+・CPUロジック
+・2種類のゲームモード
+・ゲーム本編UI
+・Cloudflare Workers URL
+・Durable Object class/binding GameRoomV6
+
+[TEST]
+・JavaScript構文確認
+・Worker JavaScript構文確認
+・既存Worker URL文字列維持確認
+・ROOM_IDS room1～room4確認
+・PC room grid 4列確認
+・スマホ room grid 2列確認
+・空ROOMはjoin-checkとjoinの両方でcheckHostPermissionを通ることを静的確認
+・既存ROOMはplayerCount>0でhost checkを通さないことを静的確認
+・ホスト権限エラー文言確認
+・個別 reset-empty がroomId単位であることを確認
+・ROOM参加処理にboardgamePlayerName保存がないことを確認
+・ゲーム開始state受信時だけboardgamePlayerName保存することを確認
+・ROOM参加時にプレイ記録呼び出しがないことを確認
+・start/restartSameだけcreatePlayRecordForStartを呼ぶことを確認
+・再接続token / active ROOM / visibilitychange / online復帰確認
+
+[ADDITIONAL TEST RESULT]
+・ローカルMock Workerで空ROOM＋権限あり参加成功を確認
+・ローカルMock Workerで空ROOM＋権限なし403「ホスト権限がありません」を確認
+・ローカルMock Workerで既存ROOM＋権限なし参加成功、ホスト確認API未呼出を確認
+・同一actionIdのstart二重送信でプレイ記録が1件のままを確認
+・ROOM 1初期化後もROOM 2状態が維持されることを確認
+・npm install / wrangler deploy --dry-run は実行環境で60秒タイムアウトのため未完了
