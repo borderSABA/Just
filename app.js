@@ -10,7 +10,7 @@
   const COMMON_MANAGER_URL = 'https://boardgame-hub-api.naitoryo7110.workers.dev';
   const COMMON_PLAYER_NAME_KEY = 'boardgamePlayerName';
   const ROOM_IDS = ['room1', 'room2', 'room3', 'room4'];
-  const APP_VERSION = 'v0.14';
+  const APP_VERSION = 'v0.15';
 
   const SESSION_KEY = `${GAME_ID}-online-session`;
   const LEGACY_SESSION_KEY = 'justOneOnlineSessionV06';
@@ -78,7 +78,7 @@
 
   async function updateTopicList(actionName, word) {
     try {
-      const data = await api('/api/topics', {
+      const data = await api('/api/topics/edit', {
         method:'POST',
         body:JSON.stringify({ action:actionName, word })
       });
