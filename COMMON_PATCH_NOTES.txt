@@ -1,12 +1,12 @@
 ジャストワン：
-共通化バージョン：v0.11 / オンラインボドゲ共通化 実装規格 v4
+共通化バージョン：v0.12 / オンラインボドゲ共通化 実装規格 v4
 
 [ADAPTER]
 GAME_ID = just-one
 GAME_NAME = ジャストワン
 MAX_PLAYERS = 10
 WORKER_ORIGIN = https://just-one-online.naitoryo7110.workers.dev
-APP_VERSION = v0.11
+APP_VERSION = v0.12
 タイトル描画関数 = renderTitle()
 ROOM一覧描画関数 = loadRooms()
 ROOM参加関数 = joinRoom() / checkRoomJoin()
@@ -132,7 +132,7 @@ CPU配列 = this.game.players（isCpu=true）
 ・npm install / wrangler deploy --dry-run は実行環境で60秒タイムアウトのため未完了
 
 
-[v0.11 GAME PATCH]
+[v0.12 GAME PATCH]
 [CLIENT]
 ファイル：app.js
 変更関数：renderGame() / bindCurrentScreen() / clueCardsHtml()
@@ -155,3 +155,19 @@ CPU配列 = this.game.players（isCpu=true）
 ・固定ROOM 1～4
 ・共通プレイヤー名/ホスト権限/プレイ記録/再接続
 ・ゲームルール/CPU/得点処理
+
+
+[v0.12 TOPIC LIST]
+[CLIENT]
+index.html / app.js / styles.css
+・トップバーに「お題リスト」を追加
+・お題一覧の閲覧、検索、追加、削除UIを追加
+・追加/削除は共通ホスト権限がある名前のみ
+
+[WORKER]
+src/index.js
+・/api/topics を追加
+・GameRoomV6名前空間内の専用DO (__just-one-topics__) に全ROOM共通お題リストを保存
+・初期値は既存WORDSを重複除去して使用
+・ゲーム開始時に最新お題リストを取得し、そのゲームの出題プールとして固定
+・既存Worker URL / ROOM処理 / ゲーム本編フローは変更なし

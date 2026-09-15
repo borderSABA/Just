@@ -10,7 +10,7 @@
   const COMMON_MANAGER_URL = 'https://boardgame-hub-api.naitoryo7110.workers.dev';
   const COMMON_PLAYER_NAME_KEY = 'boardgamePlayerName';
   const ROOM_IDS = ['room1', 'room2', 'room3', 'room4'];
-  const APP_VERSION = 'v0.10';
+  const APP_VERSION = 'v0.12';
 
   const SESSION_KEY = `${GAME_ID}-online-session`;
   const LEGACY_SESSION_KEY = 'justOneOnlineSessionV06';
@@ -28,6 +28,100 @@
   let busy = false;
   let commonNameSavedForSession = null;
   let actionSeq = 0;
+  let answerDraft = '';
+
+  let topicCache = [];
+  let topicCanEdit = false;
+
+  function currentTopicEditorName() {
+    return String(
+      me()?.name
+      || session?.name
+      || document.querySelector('#playerName')?.value
+      || sessionStorage.getItem(NAME_DRAFT_KEY)
+      || commonSavedName()
+      || ''
+    ).trim().slice(0, 16);
+  }
+
+  function renderTopicList() {
+    const list = $('#topicList');
+    const count = $('#topicCount');
+    const search = String($('#topicSearch')?.value || '').trim().toLowerCase();
+    if (!list) return;
+    const filtered = search
+      ? topicCache.filter((word) => String(word).toLowerCase().includes(search))
+      : topicCache;
+    if (count) count.textContent = `${topicCache.length}件${search ? ` / 表示 ${filtered.length}件` : ''}`;
+    list.innerHTML = filtered.length
+      ? filtered.map((word) => `<div class="topicItem"><span class="topicWord">${esc(word)}</span>${topicCanEdit?`<button type="button" class="topicDelete" data-topic-delete="${esc(word)}">削除</button>`:''}</div>`).join('')
+      : '<div class="topicEmpty">該当するお題がありません。</div>';
+    document.querySelectorAll('[data-topic-delete]').forEach((button) => {
+      button.onclick = async () => {
+        const word = button.dataset.topicDelete || '';
+        if (!word || !confirm(`「${word}」をお題リストから削除しますか？`)) return;
+        await updateTopicList('delete', word);
+      };
+    });
+  }
+
+  async function loadTopicList() {
+    const name = currentTopicEditorName();
+    try {
+      const query = name ? `?name=${encodeURIComponent(name)}` : '';
+      const data = await api(`/api/topics${query}`);
+      topicCache = Array.isArray(data.topics) ? data.topics : [];
+      topicCanEdit = data.canEdit === true;
+      const editor = $('#topicEditor');
+      const permission = $('#topicPermission');
+      if (editor) editor.hidden = !topicCanEdit;
+      if (permission) permission.textContent = topicCanEdit
+        ? '追加・削除した内容は全ROOM共通で保存され、次に開始するゲームから反映されます。'
+        : '閲覧のみです。追加・削除にはホスト権限が必要です。';
+      renderTopicList();
+    } catch (e) {
+      const list = $('#topicList');
+      if (list) list.innerHTML = `<div class="notice red">${esc(e.message)}</div>`;
+    }
+  }
+
+  async function updateTopicList(actionName, word) {
+    if (!topicCanEdit) return toast('ホスト権限がありません');
+    try {
+      const data = await api('/api/topics', {
+        method:'POST',
+        body:JSON.stringify({ action:actionName, word, name:currentTopicEditorName() })
+      });
+      topicCache = Array.isArray(data.topics) ? data.topics : topicCache;
+      topicCanEdit = data.canEdit === true;
+      const addInput = $('#topicAddInput');
+      if (actionName === 'add' && addInput) addInput.value = '';
+      renderTopicList();
+      toast(actionName === 'add' ? 'お題を追加しました。' : 'お題を削除しました。');
+    } catch (e) { toast(e.message); }
+  }
+
+  function openTopicModal() {
+    const modal = $('#topicModal');
+    if (!modal) return;
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
+    const search = $('#topicSearch');
+    if (search) search.value = '';
+    loadTopicList();
+  }
+
+  function closeTopicModal() {
+    const modal = $('#topicModal');
+    if (!modal) return;
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
+  }
+
+  function captureAnswerDraft() {
+    const input = document.querySelector('#answerInput');
+    if (input) answerDraft = input.value;
+  }
 
   function readJson(value) { try { return JSON.parse(value || 'null'); } catch { return null; } }
   function esc(value) { return String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -263,15 +357,22 @@
   }
 
   function clueCardsHtml(mode) {
+    const revealOriginal = mode === 'result';
     return `<div class="clueGrid">${(state.clues || []).map((c) => {
       const own = c.ownerId === session.playerId;
       const canRemove = mode === 'remove' && state.canRemoveClues;
       const nextRemoved = c.removed ? 'false' : 'true';
-      const maskedRemoved = c.removed && (c.maskedByRemoval || !c.text);
-      return `<button type="button" class="clueCard ${c.removed?'removed':''} ${maskedRemoved?'maskedRemoved':''} ${canRemove?'removeable':''}" ${canRemove?`data-remove="${esc(c.ownerId)}" data-next-removed="${nextRemoved}"`: 'disabled'}>
+      const maskedRemoved = !revealOriginal && c.removed && (c.maskedByRemoval || !c.text);
+      const removalClass = c.removed ? (revealOriginal ? 'resultRemoved' : 'removed') : '';
+      const removalMark = c.removed
+        ? (revealOriginal
+          ? '<div class="resultRemovedBadge">削除されていたヒント</div>'
+          : '<div class="removedMark" aria-label="削除されたヒント">×</div>')
+        : '';
+      return `<button type="button" class="clueCard ${removalClass} ${maskedRemoved?'maskedRemoved':''} ${canRemove?'removeable':''}" ${canRemove?`data-remove="${esc(c.ownerId)}" data-next-removed="${nextRemoved}"`: 'disabled'}>
         <div class="clueOwner">${esc(c.ownerName)}${own?'（自分）':''}</div>
         <div class="clueWord">${maskedRemoved?'&nbsp;':esc(c.text)}</div>
-        ${c.removed?'<div class="removedMark" aria-label="削除されたヒント">×</div>':''}
+        ${removalMark}
       </button>`;
     }).join('')}</div>`;
   }
@@ -424,6 +525,8 @@
 
   function renderGame() {
     if (!session || !state) return;
+    captureAnswerDraft();
+    if (state.phase !== 'guess' || !state.isGuesser) answerDraft = '';
     onRoomStateReceived(state);
     stopRoomRefresh();
     const top = $('#roomTopControls');
@@ -460,7 +563,7 @@
 
     else if (state.phase === 'guess') {
       if (state.isGuesser) {
-        body = `<section class="panel stack guessPanel"><div class="notice blue">残ったヒントだけが公開されています。</div>${clueCardsHtml('guess')}<input id="answerInput" class="input answerBig" maxlength="30" placeholder="回答"><div class="actions two"><button id="submitAnswer" class="btn primary">回答する</button><button id="pass" class="btn ghost">パス</button></div></section>`;
+        body = `<section class="panel stack guessPanel"><div class="notice blue">残ったヒントだけが公開されています。</div>${clueCardsHtml('guess')}<input id="answerInput" class="input answerBig" maxlength="30" placeholder="回答" value="${esc(answerDraft)}"><div class="actions two"><button id="submitAnswer" class="btn primary">回答する</button><button id="pass" class="btn ghost">パス</button></div></section>`;
       } else {
         body = `${targetHtml()}<section class="panel stack"><div class="notice">回答者の回答を待っています。</div>${clueCardsHtml('readonly')}</section>`;
       }
@@ -482,7 +585,7 @@
       const reviseButton = state.canReviseResult && state.result !== 'pass'
         ? `<button id="reviseResult" class="btn revise full" data-result="${state.result === 'correct' ? 'wrong' : 'correct'}">${state.result === 'correct' ? '不正解に修正' : '正解に修正'}</button>`
         : '';
-      body = `<section class="panel stack center"><div class="resultMark">${mark}</div><h2>${resultText}</h2><div class="muted">お題</div><div class="answerBig">${esc(state.currentTarget || '')}</div>${state.answer?`<div class="muted">回答：${esc(state.answer)}</div>`:''}${reviseButton?`<div class="resultCorrection"><div class="muted">押し間違えた場合</div>${reviseButton}</div>`:''}</section>
+      body = `<section class="panel resultPanel"><div class="resultSummary center"><div class="resultMark">${mark}</div><h2>${resultText}</h2><div class="muted">お題</div><div class="answerBig">${esc(state.currentTarget || '')}</div>${state.answer?`<div class="muted resultAnswer">回答：${esc(state.answer)}</div>`:''}${reviseButton?`<div class="resultCorrection"><div class="muted">押し間違えた場合</div>${reviseButton}</div>`:''}</div><div class="resultClues"><div class="resultCluesTitle">削除前の全ヒント</div>${clueCardsHtml('result')}</div></section>
       <section class="panel actions">${state.canNextRound?`<button id="nextRound" class="btn primary full">${state.endPending?'最終結果を見る':'次のラウンド'}</button>`:'<div class="notice">ホストが進行します。</div>'}</section>`;
     }
 
@@ -512,8 +615,8 @@
     on('#startGame', () => action('start'));
     on('#submitClue', () => { const v = $('#clueInput').value.trim(); if (!v) return toast('ヒントを入力してください。'); action('submitClue',{clue:v}); });
     on('#publishClues', () => action('publishClues'));
-    on('#submitAnswer', () => { const v = $('#answerInput').value.trim(); if (!v) return toast('回答を入力してください。'); action('submitAnswer',{answer:v}); });
-    on('#pass', () => action('pass'));
+    on('#submitAnswer', () => { const v = $('#answerInput').value.trim(); if (!v) return toast('回答を入力してください。'); answerDraft = v; action('submitAnswer',{answer:v}); });
+    on('#pass', () => { answerDraft = ''; action('pass'); });
     on('#judgeCorrect', () => action('judgeAnswer',{result:'correct'}));
     on('#judgeWrong', () => action('judgeAnswer',{result:'wrong'}));
     on('#reviseResult', () => {
@@ -531,8 +634,30 @@
       if (confirm('この部屋を完全に初期化しますか？参加者も全員退出扱いになります。')) action('reset',{keepPlayers:false});
     });
     const clue = $('#clueInput'); if (clue) clue.addEventListener('keydown',(e)=>{if(e.key==='Enter') $('#submitClue')?.click();});
-    const ans = $('#answerInput'); if (ans) ans.addEventListener('keydown',(e)=>{if(e.key==='Enter') $('#submitAnswer')?.click();});
+    const ans = $('#answerInput'); if (ans) {
+      ans.addEventListener('input', () => { answerDraft = ans.value; });
+      ans.addEventListener('keydown',(e)=>{if(e.key==='Enter') $('#submitAnswer')?.click();});
+    }
   }
+
+
+  $('#topicListButton')?.addEventListener('click', openTopicModal);
+  $('#topicClose')?.addEventListener('click', closeTopicModal);
+  $('#topicModal')?.addEventListener('click', (event) => {
+    if (event.target === $('#topicModal')) closeTopicModal();
+  });
+  $('#topicSearch')?.addEventListener('input', renderTopicList);
+  $('#topicAddButton')?.addEventListener('click', () => {
+    const value = String($('#topicAddInput')?.value || '').trim();
+    if (!value) return toast('追加するお題を入力してください。');
+    updateTopicList('add', value);
+  });
+  $('#topicAddInput')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') $('#topicAddButton')?.click();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeTopicModal();
+  });
 
 
   document.addEventListener('visibilitychange', () => {
