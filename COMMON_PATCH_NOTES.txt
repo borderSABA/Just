@@ -1,12 +1,12 @@
 ジャストワン：
-共通化バージョン：v0.13 / オンラインボドゲ共通化 実装規格 v4
+共通化バージョン：v0.14 / オンラインボドゲ共通化 実装規格 v4
 
 [ADAPTER]
 GAME_ID = just-one
 GAME_NAME = ジャストワン
 MAX_PLAYERS = 10
 WORKER_ORIGIN = https://just-one-online.naitoryo7110.workers.dev
-APP_VERSION = v0.13
+APP_VERSION = v0.14
 タイトル描画関数 = renderTitle()
 ROOM一覧描画関数 = loadRooms()
 ROOM参加関数 = joinRoom() / checkRoomJoin()
@@ -195,3 +195,10 @@ src/index.js
 ・固定ROOM 1～4
 ・ゲーム本編/CPU/ヒント/回答フロー
 ・共通プレイヤー名/プレイ記録/再接続
+
+[v0.14 TOPIC EDIT FIX]
+・お題リスト編集を共通ホスト権限確認から分離。
+・お題リストを開いたユーザーは追加・削除可能。
+・/api/topics POST はお題追加・削除だけを処理し、共通管理Workerへのホスト確認を行わない。
+・/api/topics/permission は廃止。
+・ゲーム本編、ROOM作成時のホスト権限確認、プレイ記録、再接続には変更なし。

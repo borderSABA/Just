@@ -10,7 +10,7 @@
   const COMMON_MANAGER_URL = 'https://boardgame-hub-api.naitoryo7110.workers.dev';
   const COMMON_PLAYER_NAME_KEY = 'boardgamePlayerName';
   const ROOM_IDS = ['room1', 'room2', 'room3', 'room4'];
-  const APP_VERSION = 'v0.13';
+  const APP_VERSION = 'v0.14';
 
   const SESSION_KEY = `${GAME_ID}-online-session`;
   const LEGACY_SESSION_KEY = 'justOneOnlineSessionV06';
@@ -31,18 +31,6 @@
   let answerDraft = '';
 
   let topicCache = [];
-  let topicCanEdit = false;
-
-  function currentTopicEditorName() {
-    return String(
-      me()?.name
-      || session?.name
-      || document.querySelector('#playerName')?.value
-      || sessionStorage.getItem(NAME_DRAFT_KEY)
-      || commonSavedName()
-      || ''
-    ).trim().slice(0, 16);
-  }
 
   function renderTopicList() {
     const list = $('#topicList');
@@ -54,7 +42,7 @@
       : topicCache;
     if (count) count.textContent = `${topicCache.length}件${search ? ` / 表示 ${filtered.length}件` : ''}`;
     list.innerHTML = filtered.length
-      ? filtered.map((word) => `<div class="topicItem"><span class="topicWord">${esc(word)}</span>${topicCanEdit?`<button type="button" class="topicDelete" data-topic-delete="${esc(word)}">削除</button>`:''}</div>`).join('')
+      ? filtered.map((word) => `<div class="topicItem"><span class="topicWord">${esc(word)}</span><button type="button" class="topicDelete" data-topic-delete="${esc(word)}">削除</button></div>`).join('')
       : '<div class="topicEmpty">該当するお題がありません。</div>';
     document.querySelectorAll('[data-topic-delete]').forEach((button) => {
       button.onclick = async () => {
@@ -65,74 +53,36 @@
     });
   }
 
-  async function loadTopicPermission() {
-    const name = currentTopicEditorName();
-    const editor = $('#topicEditor');
-    const permission = $('#topicPermission');
-
-    topicCanEdit = false;
-    if (editor) editor.hidden = true;
-
-    if (!name) {
-      if (permission) permission.textContent = '閲覧のみです。追加・削除にはホスト権限が必要です。';
-      renderTopicList();
-      return;
-    }
-
-    try {
-      const data = await apiGet(`/api/topics/permission?name=${encodeURIComponent(name)}`);
-      topicCanEdit = data.canEdit === true;
-      if (editor) editor.hidden = !topicCanEdit;
-      if (permission) {
-        permission.textContent = topicCanEdit
-          ? '追加・削除した内容は全ROOM共通で保存され、次に開始するゲームから反映されます。'
-          : (data.permissionAvailable === false
-            ? 'お題リストは閲覧できます。現在は編集権限を確認できません。'
-            : '閲覧のみです。追加・削除にはホスト権限が必要です。');
-      }
-      renderTopicList();
-    } catch {
-      topicCanEdit = false;
-      if (editor) editor.hidden = true;
-      if (permission) permission.textContent = 'お題リストは閲覧できます。現在は編集権限を確認できません。';
-      renderTopicList();
-    }
-  }
-
   async function loadTopicList() {
     const list = $('#topicList');
     const count = $('#topicCount');
     const editor = $('#topicEditor');
     const permission = $('#topicPermission');
 
-    topicCanEdit = false;
-    if (editor) editor.hidden = true;
+    if (editor) editor.hidden = false;
     if (count) count.textContent = '読み込み中...';
     if (list) list.innerHTML = '<div class="muted">読み込み中...</div>';
-    if (permission) permission.textContent = '編集権限を確認中...';
+    if (permission) permission.textContent = '追加・削除した内容は全ROOM共通で保存され、次に開始するゲームから反映されます。';
 
     try {
       const data = await apiGet('/api/topics');
       topicCache = Array.isArray(data.topics) ? data.topics : [];
       renderTopicList();
-      loadTopicPermission();
     } catch (e) {
       topicCache = [];
       if (count) count.textContent = '読み込み失敗';
       if (list) list.innerHTML = `<div class="notice red">${esc(e.message)}</div>`;
-      if (permission) permission.textContent = '';
+      if (permission) permission.textContent = 'お題リストを読み込めませんでした。';
     }
   }
 
   async function updateTopicList(actionName, word) {
-    if (!topicCanEdit) return toast('ホスト権限がありません');
     try {
       const data = await api('/api/topics', {
         method:'POST',
-        body:JSON.stringify({ action:actionName, word, name:currentTopicEditorName() })
+        body:JSON.stringify({ action:actionName, word })
       });
       topicCache = Array.isArray(data.topics) ? data.topics : topicCache;
-      topicCanEdit = data.canEdit === true;
       const addInput = $('#topicAddInput');
       if (actionName === 'add' && addInput) addInput.value = '';
       renderTopicList();
