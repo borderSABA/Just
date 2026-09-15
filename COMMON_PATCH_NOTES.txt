@@ -1,12 +1,12 @@
 ジャストワン：
-共通化バージョン：v0.12 / オンラインボドゲ共通化 実装規格 v4
+共通化バージョン：v0.13 / オンラインボドゲ共通化 実装規格 v4
 
 [ADAPTER]
 GAME_ID = just-one
 GAME_NAME = ジャストワン
 MAX_PLAYERS = 10
 WORKER_ORIGIN = https://just-one-online.naitoryo7110.workers.dev
-APP_VERSION = v0.12
+APP_VERSION = v0.13
 タイトル描画関数 = renderTitle()
 ROOM一覧描画関数 = loadRooms()
 ROOM参加関数 = joinRoom() / checkRoomJoin()
@@ -171,3 +171,27 @@ src/index.js
 ・初期値は既存WORDSを重複除去して使用
 ・ゲーム開始時に最新お題リストを取得し、そのゲームの出題プールとして固定
 ・既存Worker URL / ROOM処理 / ゲーム本編フローは変更なし
+
+
+[v0.13 TOPIC LIST LOAD FIX]
+[CLIENT]
+ファイル：app.js
+変更関数：loadTopicList() / loadTopicPermission() / apiGet()
+・お題一覧取得とホスト編集権限確認を完全分離
+・お題一覧は /api/topics を単純GETで先に取得し、即表示
+・編集権限は /api/topics/permission で後から確認
+・共通管理Workerの権限確認に失敗しても一覧閲覧を止めない
+・お題GETでは不要な Content-Type ヘッダーを送らず、不要なCORS preflightを避ける
+
+[WORKER]
+ファイル：src/index.js
+変更箇所：/api/topics / /api/topics/permission / GameRoomV6.topics()
+・GET /api/topics ではホスト権限確認を行わず、保存済みお題だけ返す
+・GET /api/topics/permission を追加し、編集権限確認を分離
+・POST /api/topics の追加/削除時は従来どおりWorker側でホスト権限を再確認
+
+[UNCHANGED]
+・既存Worker URL
+・固定ROOM 1～4
+・ゲーム本編/CPU/ヒント/回答フロー
+・共通プレイヤー名/プレイ記録/再接続

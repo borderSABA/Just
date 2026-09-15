@@ -10,7 +10,7 @@
   const COMMON_MANAGER_URL = 'https://boardgame-hub-api.naitoryo7110.workers.dev';
   const COMMON_PLAYER_NAME_KEY = 'boardgamePlayerName';
   const ROOM_IDS = ['room1', 'room2', 'room3', 'room4'];
-  const APP_VERSION = 'v0.12';
+  const APP_VERSION = 'v0.13';
 
   const SESSION_KEY = `${GAME_ID}-online-session`;
   const LEGACY_SESSION_KEY = 'justOneOnlineSessionV06';
@@ -65,23 +65,62 @@
     });
   }
 
-  async function loadTopicList() {
+  async function loadTopicPermission() {
     const name = currentTopicEditorName();
-    try {
-      const query = name ? `?name=${encodeURIComponent(name)}` : '';
-      const data = await api(`/api/topics${query}`);
-      topicCache = Array.isArray(data.topics) ? data.topics : [];
-      topicCanEdit = data.canEdit === true;
-      const editor = $('#topicEditor');
-      const permission = $('#topicPermission');
-      if (editor) editor.hidden = !topicCanEdit;
-      if (permission) permission.textContent = topicCanEdit
-        ? '追加・削除した内容は全ROOM共通で保存され、次に開始するゲームから反映されます。'
-        : '閲覧のみです。追加・削除にはホスト権限が必要です。';
+    const editor = $('#topicEditor');
+    const permission = $('#topicPermission');
+
+    topicCanEdit = false;
+    if (editor) editor.hidden = true;
+
+    if (!name) {
+      if (permission) permission.textContent = '閲覧のみです。追加・削除にはホスト権限が必要です。';
       renderTopicList();
+      return;
+    }
+
+    try {
+      const data = await apiGet(`/api/topics/permission?name=${encodeURIComponent(name)}`);
+      topicCanEdit = data.canEdit === true;
+      if (editor) editor.hidden = !topicCanEdit;
+      if (permission) {
+        permission.textContent = topicCanEdit
+          ? '追加・削除した内容は全ROOM共通で保存され、次に開始するゲームから反映されます。'
+          : (data.permissionAvailable === false
+            ? 'お題リストは閲覧できます。現在は編集権限を確認できません。'
+            : '閲覧のみです。追加・削除にはホスト権限が必要です。');
+      }
+      renderTopicList();
+    } catch {
+      topicCanEdit = false;
+      if (editor) editor.hidden = true;
+      if (permission) permission.textContent = 'お題リストは閲覧できます。現在は編集権限を確認できません。';
+      renderTopicList();
+    }
+  }
+
+  async function loadTopicList() {
+    const list = $('#topicList');
+    const count = $('#topicCount');
+    const editor = $('#topicEditor');
+    const permission = $('#topicPermission');
+
+    topicCanEdit = false;
+    if (editor) editor.hidden = true;
+    if (count) count.textContent = '読み込み中...';
+    if (list) list.innerHTML = '<div class="muted">読み込み中...</div>';
+    if (permission) permission.textContent = '編集権限を確認中...';
+
+    try {
+      const data = await apiGet('/api/topics');
+      topicCache = Array.isArray(data.topics) ? data.topics : [];
+      renderTopicList();
+      loadTopicPermission();
     } catch (e) {
-      const list = $('#topicList');
+      topicCache = [];
+      if (count) count.textContent = '読み込み失敗';
       if (list) list.innerHTML = `<div class="notice red">${esc(e.message)}</div>`;
+      if (permission) permission.textContent = '';
     }
   }
 
@@ -175,6 +214,26 @@
   function toast(text) {
     const el = $('#toast'); el.textContent = text; el.classList.add('show');
     clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  async function apiGet(path) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(`${serverUrl}${path}`, {
+        method:'GET',
+        cache:'no-store',
+        signal:controller.signal
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    } catch (e) {
+      if (e?.name === 'AbortError') throw new Error('お題リストの読み込みがタイムアウトしました。Workersを更新してください。');
+      throw e;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async function api(path, options = {}) {

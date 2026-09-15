@@ -1,15 +1,17 @@
-ジャストワン ONLINE v0.12 - GitHub Pages
+ジャストワン ONLINE v0.13
+オンラインボドゲ共通化 実装規格 v4 対応版
 
-オンラインボドゲ共通化 実装規格 v4 対応版です。
+01_GitHub用
+  GitHub Pagesへ上書きするファイルです。
 
-アップロード対象:
-- index.html
-- app.js
-- styles.css
-- COMMON_PATCH_NOTES.txt
+02_Cloudflare_Workers用
+  Cloudflare Workersへデプロイするファイルです。
 
-Worker URL:
+更新順:
+1. 02_Cloudflare_Workers用/0_CHECK_SERVER.bat
+2. 02_Cloudflare_Workers用/1_DEPLOY_SERVER.bat
+3. 02_Cloudflare_Workers用/2_VERIFY_SERVER.bat
+4. 01_GitHub用をGitHub Pagesへ上書き
+
+既存Worker URL:
 https://just-one-online.naitoryo7110.workers.dev
-
-HOME / プレイ記録ボタンは表示しません。
-共通プレイヤー名、ホスト権限確認、プレイ記録は内部連携します。
